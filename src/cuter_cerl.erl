@@ -255,12 +255,12 @@ store_fun(Exps, M, {Fun, Def}, Cache, TagGen) ->
   {FunName, Arity} = Fun#c_var.name,
   MFA = {M, FunName, Arity},
   Exported = lists:member(MFA, Exps),
-%  io:format("===========================================================================~n"),
-%  io:format("BEFORE~n"),
-%  io:format("~p~n", [Def]),
+  %io:format("===========================================================================~n"),
+  %io:format("BEFORE~n"),
+  %io:format("~p~n", [Def]),
   AnnDef = annotate(Def, TagGen),
-%  io:format("AFTER~n"),
-%  io:format("~p~n", [AnnDef]),
+  %io:format("AFTER~n"),
+  %io:format("~p~n", [AnnDef]),
   cuter_codeserver:insert_in_module_cache(MFA, {AnnDef, Exported}, Cache).
 
 -type type_info() :: {'type', cerl_typedef()}
@@ -308,7 +308,8 @@ annotate(Tree, TagGen, InPats) ->
     alias ->
       Var = annotate(cerl:alias_var(Tree), TagGen, InPats),
       Pat = annotate(cerl:alias_pat(Tree), TagGen, InPats),
-      cerl:update_c_alias(Tree, Var, Pat);
+      T = cerl:update_c_alias(Tree, Var, Pat),
+      cerl:add_ann({tainted, true}, T);
     'apply' ->
       % TODO Annotate applications for lambda terms.
       Op = annotate(cerl:apply_op(Tree), TagGen, InPats),
