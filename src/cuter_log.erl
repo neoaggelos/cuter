@@ -337,6 +337,7 @@ log(Fd, OpCode, TagID, Data) ->
         throw:{unsupported_term, _} -> ok
       end
   end.
+  
 -else.
 log(_, _, _) -> ok.
 -endif.

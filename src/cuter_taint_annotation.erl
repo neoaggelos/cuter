@@ -108,10 +108,7 @@ annotate_taint(Tree, SM) ->
 
 -spec get_arg_taints(cerl:cerl()) -> [{taint(), atom()}].
 get_arg_taints(Arg) ->
-  case cerl:type(Arg) of
-    var ->
-      [{get_taint(Arg), var}]
-  end.
+  [{get_taint(Arg), var}].
 
 
 -spec annotate_taint_all([cerl:cerl()], symbol_table()) -> {[cerl:cerl()], atom()}.
