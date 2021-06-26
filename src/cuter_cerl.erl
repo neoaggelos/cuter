@@ -166,11 +166,22 @@ get_stored_types(Cache) ->
 %% {M, Fun, Arity}      {Def :: #c_fun{}, Exported :: boolean()}
 -spec store_module(cuter:mod(), cerl:cerl(), cuter_codeserver:module_cache(), tag_generator()) -> ok.
 store_module(M, AST, Cache, TagGen) ->
-  store_module_info(anno, M, AST, Cache),
-  store_module_info(name, M, AST, Cache),
-  store_module_info(exports, M, AST, Cache),
-  store_module_info(attributes, M, AST, Cache),
-  store_module_funs(M, AST, Cache, TagGen).
+  AST1 = case cuter_config:fetch(?ANNOTATIONS) of
+    {ok, Anns} ->
+      case proplists:get_value(M, Anns) of
+        undefined -> AST;
+        F ->
+          io:format("XXX ~p~n", [F]),
+	  AST
+      end;
+    _ ->
+      AST
+  end,
+  store_module_info(anno, M, AST1, Cache),
+  store_module_info(name, M, AST1, Cache),
+  store_module_info(exports, M, AST1, Cache),
+  store_module_info(attributes, M, AST1, Cache),
+  store_module_funs(M, AST1, Cache, TagGen).
 
 %% Gets the Core Erlang AST of a module.
 -spec get_core(cuter:mod(), boolean()) -> {ok, cerl:cerl()} | load_error().
