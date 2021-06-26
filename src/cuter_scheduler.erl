@@ -4,14 +4,14 @@
 -behaviour(gen_server).
 
 %% External API.
--export([start/4, stop/1, request_input/1, store_execution/3, set_depth/2,
+-export([start/2, stop/1, request_input/1, store_execution/3, set_depth/2,
          request_operation/1, solver_reply/2, add_seed_input/2, clear_erroneous_inputs/1]).
 %% Get logs API.
 -export([get_visited_tags/1, get_erroneous_inputs/1, get_solved_models/1, get_not_solved_models/1]).
 %% gen_server callbacks.
 -export([init/1, terminate/2, code_change/3, handle_info/2, handle_call/3, handle_cast/2]).
 
--export_type([handle/0, operation_id/0]).
+-export_type([handle/0, operation_id/0, scheduler/0]).
 
 -include("include/cuter_macros.hrl").
 
@@ -32,6 +32,8 @@
 -type execution_info_tab() :: dict:dict(handle(), execution_info()).
 
 -type from()  :: {pid(), reference()}.
+
+-type scheduler() :: pid().
 
 %% Server's state
 %% ---------------
@@ -90,41 +92,41 @@
 %% ----------------------------------------------------------------------------
 
 %% Starts the Scheduler.
--spec start(file:filename(), integer(), atom(), pid()) -> pid().
-start(Python, DefaultDepth, Strategy, CodeServer) ->
-  case gen_server:start_link(?MODULE, [Python, DefaultDepth, Strategy, CodeServer], []) of
+-spec start(integer(), pid()) -> scheduler().
+start(DefaultDepth, CodeServer) ->
+  case gen_server:start_link(?MODULE, [DefaultDepth, CodeServer], []) of
     {ok, Scheduler} -> Scheduler;
     {error, R} -> exit({scheduler_start, R})
   end.
 
 %% Stops the Scheduler.
--spec stop(pid()) -> ok.
+-spec stop(scheduler()) -> ok.
 stop(Scheduler) ->
   gen_server:call(Scheduler, stop).
 
 %% Requests a new input to execute.
--spec request_input(pid()) -> {handle(), cuter:input()} | empty | try_later.
+-spec request_input(scheduler()) -> {handle(), cuter:input()} | empty | try_later.
 request_input(Scheduler) ->
   gen_server:call(Scheduler, request_input, infinity).
 
 %% Stores the information of an execution.
--spec store_execution(pid(), handle(), cuter_analyzer:info()) -> ok.
+-spec store_execution(scheduler(), handle(), cuter_analyzer:info()) -> ok.
 store_execution(Scheduler, Handle, Info) ->
   gen_server:call(Scheduler, {store_execution, Handle, Info}, infinity).
 
--spec request_operation(pid()) -> cuter_solver:solver_input() | try_later.
+-spec request_operation(scheduler()) -> cuter_solver:solver_input() | try_later.
 request_operation(Scheduler) ->
   gen_server:call(Scheduler, request_operation, infinity).
 
--spec solver_reply(pid(), cuter_solver:solver_result()) -> ok.
+-spec solver_reply(scheduler(), cuter_solver:solver_result()) -> ok.
 solver_reply(Scheduler, Result) ->
   gen_server:call(Scheduler, {solver_reply, Result}, infinity).
 
--spec add_seed_input(pid(), cuter:input()) -> ok.
+-spec add_seed_input(scheduler(), cuter:input()) -> ok.
 add_seed_input(Scheduler, SeedInput) ->
   gen_server:call(Scheduler, {add_seed_input, SeedInput}, infinity).
 
--spec set_depth(pid(), pos_integer()) -> ok.
+-spec set_depth(scheduler(), pos_integer()) -> ok.
 set_depth(Scheduler, Depth) ->
   gen_server:call(Scheduler, {set_depth, Depth}, infinity).
 
@@ -132,23 +134,23 @@ set_depth(Scheduler, Depth) ->
 %% Get logs API
 %% ----------------------------------------------------------------------------
 
--spec get_visited_tags(pid()) -> cuter_cerl:visited_tags().
+-spec get_visited_tags(scheduler()) -> cuter_cerl:visited_tags().
 get_visited_tags(Scheduler) ->
   gen_server:call(Scheduler, get_visited_tags).
 
--spec get_erroneous_inputs(pid()) -> [cuter:input()].
+-spec get_erroneous_inputs(scheduler()) -> [cuter:input()].
 get_erroneous_inputs(Scheduler) ->
   gen_server:call(Scheduler, get_erroneous_inputs).
 
--spec clear_erroneous_inputs(pid()) -> ok.
+-spec clear_erroneous_inputs(scheduler()) -> ok.
 clear_erroneous_inputs(Scheduler) ->
   gen_server:call(Scheduler, clear_erroneous_inputs).
 
--spec get_solved_models(pid()) -> non_neg_integer().
+-spec get_solved_models(scheduler()) -> non_neg_integer().
 get_solved_models(Scheduler) ->
   gen_server:call(Scheduler, get_solved_models).
 
--spec get_not_solved_models(pid()) -> non_neg_integer().
+-spec get_not_solved_models(scheduler()) -> non_neg_integer().
 get_not_solved_models(Scheduler) ->
   gen_server:call(Scheduler, get_not_solved_models).
 
@@ -157,14 +159,14 @@ get_not_solved_models(Scheduler) ->
 %% ----------------------------------------------------------------------------
 
 %% init/1
--type init_arg() :: [file:filename() | integer() | pid(), ...].
--spec init(init_arg()) -> {ok, state()}.
-init([Python, DefaultDepth, Strategy, CodeServer]) ->
+-spec init([pos_integer() | pid(), ...]) -> {ok, state()}.
+init([DefaultDepth, CodeServer]) ->
+  {ok, Strategy} = cuter_config:fetch(?STRATEGY),
   _ = init_execution_counter(),
   StrategyState = Strategy:init(),
   {ok, #st{ codeServer = CodeServer
           , infoTab = dict:new()
-          , python = Python
+          , python = python_cmd()
           , depth = DefaultDepth
           , visitedTags = gb_sets:new()
           , running = dict:new()
@@ -173,7 +175,17 @@ init([Python, DefaultDepth, Strategy, CodeServer]) ->
           , inputsQueue = queue:new()
           , solving = dict:new()
           , strategyState = StrategyState
-	  , strategy = Strategy}}.
+	        , strategy = Strategy }}.
+
+python_cmd() ->
+  {ok, T} = cuter_config:fetch(?Z3_TIMEOUT),
+  Base = ?PYTHON_CALL ++ " --smt --timeout " ++ integer_to_list(T),
+  case cuter_config:fetch(?DEBUG_SMT) of
+    {ok, true} ->
+      Base ++ " -d";
+    _ ->
+      Base
+  end.
 
 %% terminate/2
 -spec terminate(any(), state()) -> ok.
@@ -280,7 +292,8 @@ handle_call(request_operation, {Who, _Ref}, S=#st{strategyState = StrategyState,
     %% Located an operation to reverse.
     {ok, OperationId, Handle} ->
       ExecInfo = dict:fetch(Handle, Info),
-      Reply = {Python, ExecInfo#info.mappings, ExecInfo#info.traceFile, OperationId},
+      Reply = cuter_solver:mk_solver_input(Python, ExecInfo#info.mappings,
+                                           ExecInfo#info.traceFile, OperationId),
       {reply, Reply, S#st{solving = dict:store(Who, OperationId, Solving)}}
   end;
 

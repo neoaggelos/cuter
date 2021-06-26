@@ -5,13 +5,12 @@
 -behaviour(gen_server).
 
 %% external exports
--export([start/4, start/6, stop/1, load/2, unsupported_mfa/2, retrieve_spec/2,
+-export([start/0, stop/1, load/2, unsupported_mfa/2, retrieve_spec/2,
          get_feasible_tags/2, get_logs/1, get_whitelist/1, get_visited_tags/1,
          visit_tag/2, calculate_callgraph/2,
          %% Work with module cache
          merge_dumped_cached_modules/2, modules_of_dumped_cache/1,
          lookup_in_module_cache/2, insert_in_module_cache/3,
-         no_cached_modules/0,
          %% Access logs
          cachedMods_of_logs/1, visitedTags_of_logs/1, tagsAddedNo_of_logs/1,
          unsupportedMfas_of_logs/1, loadedMods_of_logs/1]).
@@ -19,12 +18,11 @@
 -export([init/1, terminate/2, code_change/3,
          handle_info/2, handle_call/3, handle_cast/2]).
 %% Counter of branches & Tag generator.
--export([set_branch_counter/1, get_branch_counter/0, initial_branch_counter/0,
-         generate_tag/0]).
+-export([get_branch_counter/0, init_branch_counter/0, generate_tag/0]).
 
 -include("include/cuter_macros.hrl").
 
--export_type([cached_modules/0, counter/0, module_cache/0, logs/0]).
+-export_type([cached_modules/0, codeserver/0, counter/0, module_cache/0, logs/0]).
 
 %% Macros
 -define(BRANCH_COUNTER_PREFIX, '__branch_count').
@@ -60,38 +58,23 @@
 -type module_deps()     :: ordsets:ordset(cuter:mod()).
 -type visited_remotes() :: ordsets:ordset(remote_type()).
 
-%% Server's state
-%% ---------------
-%%
-%% db :: ets:tid()
-%%   Acts as a reference table for looking up the ETS table that holds a module's extracted code.
-%%   It stores tuples {Module :: module(), ModuleDb :: ets:tid()}.
-%% super :: pid()
-%%   The supervisor process that spawned the codeserver.
-%% tags :: tags()
-%%   The visited tags.
-%% waiting :: orddict()
-%%   The processes that await a response and their requests.
-%%   Each element in the dictionary is {{Request :: atom(), Info :: tuple()}, Process :: pid()}.
-%% withPmatch :: boolean()
-%%   Whether to use pattern matching compilation optimization or not.
-%% workers :: [pid()]
-%%   PIDs of all worker processes.
-%% unsupportedMfas :: sets:set(mfa())
-%%   The set of mfa() that are not supported for symbolic execution but were
-%%   encountered during the concolic executions.
+-type codeserver() :: pid().
+-type codeserver_args() :: #{}.
 
+%% Server's state
 -record(st, {
-  db                           :: cache(),
-  super                        :: pid(),
-  tags = gb_sets:new()         :: tags(),
-  waiting = orddict:new()      :: [{{atom(), tuple()}, pid()}],
-  withPmatch                   :: boolean(),
-  workers = []                 :: [pid()],
+  %% Acts as a reference table for looking up the ETS table that holds a module's extracted code.
+  %% It stores tuples {Module :: module(), ModuleDb :: ets:tid()}.
+  db :: cache(),
+  %% The visited tags.
+  tags = gb_sets:new() :: tags(),
+  %% The set of mfa() that are not supported for symbolic execution but were
+  %% encountered during the concolic executions.
   unsupportedMfas = sets:new() :: sets:set(mfa()),
-  whitelist                    :: cuter_mock:whitelist(),
-  callgraph                    :: cuter_callgraph:callgraph() | 'undefined',
-  normalizeTypes               :: boolean()
+  %% The whitelisted MFAs that should be treated as BIFs.
+  whitelist :: cuter_mock:whitelist(),
+  %% The computed callgraph from the entry points.
+  callgraph :: cuter_callgraph:callgraph() | 'undefined'
 }).
 -type state() :: #st{}.
 
@@ -99,32 +82,26 @@
 %% Public API
 %% ----------------------------------------------------------------------------
 
-%% Starts a CodeServer in the local node.
--spec start(pid(), boolean(), cuter_mock:whitelist(), boolean()) -> pid().
-start(Super, WithPmatch, Whitelist, NormalizeTypes) ->
-  start(Super, no_cached_modules(), initial_branch_counter(), WithPmatch, Whitelist, NormalizeTypes).
-
-%% Starts a CodeServer in the local node with an initialized
-%% modules' cache and tag counter.
--spec start(pid(), cached_modules(), counter(), boolean(), cuter_mock:whitelist(), boolean()) -> pid().
-start(Super, StoredMods, TagsN, WithPmatch, Whitelist, NormalizeTypes) ->
-  case gen_server:start(?MODULE, [Super, StoredMods, TagsN, WithPmatch, Whitelist, NormalizeTypes], []) of
+%% Starts a code server in the local node.
+-spec start() -> codeserver().
+start() ->
+  case gen_server:start_link(?MODULE, #{}, []) of
     {ok, CodeServer} -> CodeServer;
     {error, Reason}  -> exit({codeserver_start, Reason})
   end.
 
-%% Stops a CodeServer.
--spec stop(pid()) -> ok.
+%% Stops a code server.
+-spec stop(codeserver()) -> ok.
 stop(CodeServer) ->
-  gen_server:cast(CodeServer, {stop, self()}).
+  gen_server:cast(CodeServer, stop).
 
 %% Requests a module's cache.
--spec load(pid(), module()) -> load_reply().
+-spec load(codeserver(), module()) -> load_reply().
 load(CodeServer, M) ->
   gen_server:call(CodeServer, {load, M}).
 
 %% Log an MFA that cannot be symbolically evaluated.
--spec unsupported_mfa(pid(), mfa()) -> ok.
+-spec unsupported_mfa(codeserver(), mfa()) -> ok.
 -ifdef(LOG_UNSUPPORTED_MFAS).
 unsupported_mfa(CodeServer, MFA) ->
   gen_server:cast(CodeServer, {unsupported_mfa, MFA}).
@@ -133,37 +110,37 @@ unsupported_mfa(_, _) -> ok.
 -endif.
 
 %% Retrieves the spec of a given MFA.
--spec retrieve_spec(pid(), mfa()) -> spec_reply().
+-spec retrieve_spec(codeserver(), mfa()) -> spec_reply().
 retrieve_spec(CodeServer, MFA) ->
   gen_server:call(CodeServer, {get_spec, MFA}).
 
 %% Reports visiting a tag.
--spec visit_tag(pid(), cuter_cerl:tag()) -> ok.
+-spec visit_tag(codeserver(), cuter_cerl:tag()) -> ok.
 visit_tag(CodeServer, Tag) ->
   gen_server:cast(CodeServer, {visit_tag, Tag}).
 
 %% Gets the visited tags.
--spec get_visited_tags(pid()) -> tags().
+-spec get_visited_tags(codeserver()) -> tags().
 get_visited_tags(CodeServer) ->
   gen_server:call(CodeServer, get_visited_tags, infinity).
 
 %% Gets the logs of the CodeServer.
--spec get_logs(pid()) -> logs().
+-spec get_logs(codeserver()) -> logs().
 get_logs(CodeServer) ->
   gen_server:call(CodeServer, get_logs).
 
 %% Gets the whitelisted MFAs.
--spec get_whitelist(pid()) -> cuter_mock:whitelist().
+-spec get_whitelist(codeserver()) -> cuter_mock:whitelist().
 get_whitelist(CodeServer) ->
   gen_server:call(CodeServer, get_whitelist).
 
 %% Calculates the callgraph from some MFAs.
--spec calculate_callgraph(pid(), [mfa()]) -> ok | error.
+-spec calculate_callgraph(codeserver(), [mfa()]) -> ok | error.
 calculate_callgraph(CodeServer, Mfas) ->
   gen_server:call(CodeServer, {calculate_callgraph, Mfas}).
 
 %% Gets the feasible tags.
--spec get_feasible_tags(pid(), cuter_cerl:node_types()) -> cuter_cerl:visited_tags().
+-spec get_feasible_tags(codeserver(), cuter_cerl:node_types()) -> cuter_cerl:visited_tags().
 get_feasible_tags(CodeServer, NodeTypes) ->
   gen_server:call(CodeServer, {get_feasible_tags, NodeTypes}).
 
@@ -172,17 +149,12 @@ get_feasible_tags(CodeServer, NodeTypes) ->
 %% ----------------------------------------------------------------------------
 
 %% gen_server callback : init/1
--spec init([pid() | cached_modules() | counter() | boolean() | cuter_mock:whitelist(), ...]) -> {ok, state()}.
-init([Super, CachedMods, TagsN, WithPmatch, Whitelist, NormalizeTypes]) ->
-  link(Super),
+-spec init(codeserver_args()) -> {ok, state()}.
+init(_Args) ->
+  {ok, Whitelist} = cuter_config:fetch(?WHITELISTED_MFAS),
   Db = ets:new(?MODULE, [ordered_set, protected]),
-  add_cached_modules(Db, CachedMods),
-  _ = set_branch_counter(TagsN), %% Initialize the counter for the branch enumeration.
-  {ok, #st{ db = Db
-          , super = Super
-          , withPmatch = WithPmatch
-          , whitelist = Whitelist
-          , normalizeTypes = NormalizeTypes}}.
+  init_branch_counter(),
+  {ok, #st{ db = Db, whitelist = Whitelist }}.
 
 %% gen_server callback : terminate/2
 -spec terminate(any(), state()) -> ok.
@@ -211,7 +183,7 @@ handle_info(_Msg, State) ->
                .
 handle_call({load, M}, _From, State) ->
   {reply, try_load(M, State), State};
-handle_call({get_spec, {M, F, A}=MFA}, _From, #st{normalizeTypes = NormalizeTypes}=State) ->
+handle_call({get_spec, {M, F, A}=MFA}, _From, State) ->
   case try_load(M, State) of
     {ok, MDb} ->
       case cuter_cerl:retrieve_spec(MDb, {F, A}) of
@@ -226,7 +198,7 @@ handle_call({get_spec, {M, F, A}=MFA}, _From, #st{normalizeTypes = NormalizeType
               {Mod, StoredTypes}
             end,
           ManyStoredTypes = [Fn(Mod) || Mod <- DepMods],
-          Parsed = cuter_types:parse_spec(MFA, CerlSpec, ManyStoredTypes, NormalizeTypes),
+          Parsed = cuter_types:parse_spec(MFA, CerlSpec, ManyStoredTypes),
           cuter_pp:parsed_spec(Parsed),
           {reply, {ok, Parsed}, State}
       end;
@@ -260,17 +232,14 @@ handle_call({calculate_callgraph, Mfas}, _From, State=#st{whitelist = Whitelist}
   end.
 
 %% gen_server callback : handle_cast/2
--spec handle_cast({stop, pid()}, state()) -> {stop, normal, state()} | {noreply, state()}
+-spec handle_cast(stop, state()) -> {stop, normal, state()} | {noreply, state()}
                ; ({unsupported_mfa, mfa()}, state()) -> {noreply, state()}
                ; ({visit_tag, cuter_cerl:tag()}, state()) -> {noreply, state()}.
 handle_cast({unsupported_mfa, MFA}, State=#st{unsupportedMfas = Ms}) ->
   Ms1 = sets:add_element(MFA, Ms),
   {noreply, State#st{unsupportedMfas = Ms1}};
-handle_cast({stop, FromWho}, State=#st{super = Super}) ->
-  case FromWho =:= Super of
-    true  -> {stop, normal, State};
-    false -> {noreply, State}
-  end;
+handle_cast(stop, State) ->
+  {stop, normal, State};
 handle_cast({visit_tag, Tag}, State=#st{tags = Tags}) ->
   Ts = gb_sets:add_element(cuter_cerl:id_of_tag(Tag), Tags),
   {noreply, State#st{tags = Ts}}.
@@ -364,9 +333,16 @@ try_load(M, State) ->
 
 %% Load a module's code
 -spec load_mod(module(), state()) -> {ok, module_cache()} | cuter_cerl:compile_error().
-load_mod(M, #st{db = Db, withPmatch = WithPmatch}) ->
+load_mod(M, #st{db = Db}) ->
   Cache = ets:new(M, [ordered_set, protected]),  %% Create an ETS table to store the code of the module
   ets:insert(Db, {M, Cache}),                    %% Store the tid of the ETS table
+  WithPmatch =
+    case cuter_config:fetch(?DISABLE_PMATCH) of
+      {ok, true} ->
+        false;
+      _ ->
+        true
+    end,
   Reply = cuter_cerl:load(M, Cache, fun generate_tag/0, WithPmatch),  %% Load the code of the module
   case Reply of
     {ok, M} -> {ok, Cache};
@@ -456,10 +432,6 @@ dump_cached_modules(Db) ->
   Fun = fun({M, MDb}, Stored) -> dict:store(M, ets:tab2list(MDb), Stored) end,
   ets:foldl(Fun, dict:new(), Db).
 
-%% Creates an empty modules' cache.
--spec no_cached_modules() -> cached_modules().
-no_cached_modules() -> dict:new().
-
 %% Merges two caches.
 -spec merge_dumped_cached_modules(cached_modules(), cached_modules()) -> cached_modules().
 merge_dumped_cached_modules(Cached1, Cached2) ->
@@ -470,32 +442,19 @@ merge_dumped_cached_modules(Cached1, Cached2) ->
 modules_of_dumped_cache(Cached) ->
   dict:fetch_keys(Cached).
 
-%% Populates the DB with the stored modules provided.
--spec add_cached_modules(cache(), cached_modules()) -> ok.
-add_cached_modules(Db, CachedMods) ->
-  Fun = fun(M, Info, CDb) ->
-	    MDb = ets:new(M, [ordered_set, protected]),
-	    ets:insert(MDb, Info),
-	    ets:insert(CDb, {M, MDb}),
-	    CDb
-	end,
-  dict:fold(Fun, Db, CachedMods),
-  ok.
-
 %% ----------------------------------------------------------------------------
 %% Counter for branch enumeration
 %% ----------------------------------------------------------------------------
 
--spec initial_branch_counter() -> 0.
-initial_branch_counter() -> 0.
+%% Initializes the branch counter to 0.
+-spec init_branch_counter() -> ok.
+init_branch_counter() ->
+  _ = put(?BRANCH_COUNTER_PREFIX, 0),
+  ok.
 
 -spec get_branch_counter() -> counter().
 get_branch_counter() ->
   get(?BRANCH_COUNTER_PREFIX).
-
--spec set_branch_counter(counter()) -> counter() | undefined.
-set_branch_counter(N) ->
-  put(?BRANCH_COUNTER_PREFIX, N).
 
 -spec generate_tag() -> cuter_cerl:tag().
 generate_tag() ->

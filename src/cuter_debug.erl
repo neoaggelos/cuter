@@ -30,10 +30,10 @@ compile_options(false) -> [to_core].
 
 %% Prints the AST of a module.
 %% Run as:
-%%   erl -noshell -pa ebin/ -eval "cuter_debug:parse_module(lists, true)" -s init stop
+%%   erl -noshell -pa ebin/ -eval "cuter_debug:parse_module(lists)" -s init stop
 -spec parse_module(module(), boolean()) -> ok.
 parse_module(M, WithPmatch) ->
-  case cuter_cerl:get_core(M, WithPmatch) of
+	case cuter_cerl:get_core(M, WithPmatch) of
     {error, E} ->
       io:format("ERROR: ~p~n", [E]);
     {ok, AST} ->
