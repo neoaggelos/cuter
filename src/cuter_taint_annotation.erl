@@ -1,5 +1,5 @@
 -module(cuter_taint_annotation).
--export([annotate_taint/2]).
+-export([annotate_taint/2, get_taint/1, get_taint_anno/1]).
 -export_type([taint/0, symbol_table/0]).
 
 -type taint() :: atom().
@@ -120,6 +120,10 @@ annotate_taint_all(Trees, SM) ->
 -spec get_taint(cerl:cerl()) -> atom().
 get_taint(Tree) ->
   Anno = cerl:get_ann(Tree),
+  get_taint_anno(Anno).
+
+-spec get_taint_anno([]) -> taint().
+get_taint_anno(Anno) ->
   Sf = fun(A, B) ->
 	   case A of
 	     {tainted, T} -> B or T;
@@ -127,7 +131,6 @@ get_taint(Tree) ->
 	   end
        end,
   lists:foldl(Sf, false, Anno).
-
 
 -spec get_all_taint([cerl:cerl()]) -> atom().
 get_all_taint(Trees) ->
