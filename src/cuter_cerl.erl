@@ -171,8 +171,7 @@ store_module(M, AST, Cache, TagGen) ->
       case proplists:get_value(M, Anns) of
         undefined -> AST;
         F ->
-          io:format("XXX ~p~n", [F]),
-	  AST
+          cuter_debug:load_annotations(M, true, F)
       end;
     _ ->
       AST
@@ -312,6 +311,20 @@ classify_attributes([{What, #c_literal{val = Val}}|Attrs], Types, Specs) ->
 %% Annotate the AST with tags.
 %% ----------------------------------------------------------------------------
 
+-spec update_taint_ann(cuter_taint_annotation:taint(), cerl:cerl()) -> cerl:cerl().
+update_taint_ann(Taint, Tree) ->
+  Anno = cerl:get_ann(Tree),
+  Sf = fun(A, B) ->
+	   case A of
+	     {tainted, _} -> true;
+	     _ -> B
+	   end
+       end,
+  case lists:foldl(Sf, false, Anno) of
+    true -> Tree;
+    false -> cerl:add_ann([{tainted, Taint}], Tree)
+  end.
+
 -spec annotate(cerl:cerl(), tag_generator()) -> cerl:cerl().
 annotate(Def, TagGen) -> annotate(Def, TagGen, false).
 
@@ -323,17 +336,17 @@ annotate(Tree, TagGen, InPats) ->
       Var = annotate(cerl:alias_var(Tree), TagGen, InPats),
       Pat = annotate(cerl:alias_pat(Tree), TagGen, InPats),
       T = cerl:update_c_alias(Tree, Var, Pat),
-      cerl:add_ann([{tainted, Default_taint}], T);
+      update_taint_ann(Default_taint, T);
     'apply' ->
       % TODO Annotate applications for lambda terms.
       Op = annotate(cerl:apply_op(Tree), TagGen, InPats),
       Args = annotate_all(cerl:apply_args(Tree), TagGen, InPats),
       T = cerl:update_c_apply(Tree, Op, Args),
-      cerl:add_ann([{tainted, Default_taint}], T);
+      update_taint_ann(Default_taint, T);
     binary ->
       Segs = annotate_all(cerl:binary_segments(Tree), TagGen, InPats),
       T1 = cerl:update_c_binary(Tree, Segs),
-      T = cerl:add_ann([{tainted, Default_taint}], T1),
+      T = update_taint_ann(Default_taint, T1),
       case InPats of
         false -> T;
         true  -> cerl:add_ann(tag_pair(TagGen), T)
@@ -345,7 +358,7 @@ annotate(Tree, TagGen, InPats) ->
       Type = annotate(cerl:bitstr_type(Tree), TagGen, InPats),
       Flags = annotate(cerl:bitstr_flags(Tree), TagGen, InPats),
       T1 = cerl:update_c_bitstr(Tree, Val, Size, Unit, Type, Flags),
-      T = cerl:add_ann([{tainted, Default_taint}], T1),
+      T = update_taint_ann(Default_taint, T1),
       case InPats of
         false -> T;
         true  -> cerl:add_ann(tag_pair(TagGen), T)
@@ -355,29 +368,29 @@ annotate(Tree, TagGen, InPats) ->
       Name = annotate(cerl:call_name(Tree), TagGen, InPats),
       Args = annotate_all(cerl:call_args(Tree), TagGen, InPats),
       T = cerl:update_c_call(Tree, Mod, Name, Args),
-      cerl:add_ann([{tainted, Default_taint}], T);
+      update_taint_ann(Default_taint, T);
     'case' ->
       Arg = annotate(cerl:case_arg(Tree), TagGen, InPats),
       Clauses0 = annotate_all(cerl:case_clauses(Tree), TagGen, InPats),
       Clauses = mark_last_clause(Clauses0),
       T = cerl:update_c_case(Tree, Arg, Clauses),
-      cerl:add_ann([{tainted, Default_taint}], T);
+      update_taint_ann(Default_taint, T);
     'catch' ->
       Body = annotate(cerl:catch_body(Tree), TagGen, InPats),
       T = cerl:update_c_catch(Tree, Body),
-      cerl:add_ann([{tainted, Default_taint}], T);
+      update_taint_ann(Default_taint, T);
     clause ->
       Pats = annotate_all(cerl:clause_pats(Tree), TagGen, true),
       Guard = annotate(cerl:clause_guard(Tree), TagGen, InPats),
       Body = annotate(cerl:clause_body(Tree), TagGen, InPats),
       T = cerl:update_c_clause(Tree, Pats, Guard, Body),
       T1 = cerl:add_ann(tag_pair(TagGen), T),
-      cerl:add_ann([{tainted, Default_taint}], T1);
+      update_taint_ann(Default_taint, T1);
     cons ->
       Hd = annotate(cerl:cons_hd(Tree), TagGen, InPats),
       Tl = annotate(cerl:cons_tl(Tree), TagGen, InPats),
       T1 = cerl:update_c_cons_skel(Tree, Hd, Tl),
-      T = cerl:add_ann([{tainted, Default_taint}], T1),
+      T = update_taint_ann(Default_taint, T1),
       case InPats of
         false -> T;
         true  -> cerl:add_ann(tag_pair(TagGen), T)
@@ -386,19 +399,19 @@ annotate(Tree, TagGen, InPats) ->
       Vars = annotate_all(cerl:fun_vars(Tree), TagGen, InPats),
       Body = annotate(cerl:fun_body(Tree), TagGen, InPats),
       T = cerl:update_c_fun(Tree, Vars, Body),
-      cerl:add_ann([{tainted, Default_taint}], T);
+      update_taint_ann(Default_taint, T);
     'let' ->
       Vars = annotate_all(cerl:let_vars(Tree), TagGen, InPats),
       Arg = annotate(cerl:let_arg(Tree), TagGen, InPats),
       Body = annotate(cerl:let_body(Tree), TagGen, InPats),
       T = cerl:update_c_let(Tree, Vars, Arg, Body),
-      cerl:add_ann([{tainted, Default_taint}], T);
+      update_taint_ann(Default_taint, T);
     letrec ->
       Combine = fun(X, Y) -> {annotate(X, TagGen, InPats), annotate(Y, TagGen, InPats)} end,
       Defs = [Combine(N, D) || {N, D} <- cerl:letrec_defs(Tree)],
       Body = annotate(cerl:letrec_body(Tree), TagGen, InPats),
       T = cerl:update_c_letrec(Tree, Defs, Body),
-      cerl:add_ann([{tainted, Default_taint}], T);
+      update_taint_ann(Default_taint, T);
     literal ->
       case InPats of
         false -> cerl:add_ann([{tainted, Default_taint}], Tree);
@@ -408,19 +421,19 @@ annotate(Tree, TagGen, InPats) ->
       Name = annotate(cerl:primop_name(Tree), TagGen, InPats),
       Args = annotate_all(cerl:primop_args(Tree), TagGen, InPats),
       T = cerl:update_c_primop(Tree, Name, Args),
-      cerl:add_ann([{tainted, Default_taint}], T);
+      update_taint_ann(Default_taint, T);
     'receive' ->
       Clauses0 = annotate_all(cerl:receive_clauses(Tree), TagGen, InPats),
       Clauses = mark_last_clause(Clauses0),
       Timeout = annotate(cerl:receive_timeout(Tree), TagGen, InPats),
       Action = annotate(cerl:receive_action(Tree), TagGen, InPats),
       T = cerl:update_c_receive(Tree, Clauses, Timeout, Action),
-      cerl:add_ann([{tainted, Default_taint}], T);
+      update_taint_ann(Default_taint, T);
     seq ->
       Arg = annotate(cerl:seq_arg(Tree), TagGen, InPats),
       Body = annotate(cerl:seq_body(Tree), TagGen, InPats),
       T = cerl:update_c_seq(Tree, Arg, Body),
-      cerl:add_ann([{tainted, Default_taint}], T);
+      update_taint_ann(Default_taint, T);
     'try' ->
       Arg = annotate(cerl:try_arg(Tree), TagGen, InPats),
       Vars = annotate_all(cerl:try_vars(Tree), TagGen, InPats),
@@ -428,11 +441,11 @@ annotate(Tree, TagGen, InPats) ->
       Evars = annotate_all(cerl:try_evars(Tree), TagGen, InPats),
       Handler = annotate(cerl:try_handler(Tree), TagGen, InPats),
       T = cerl:update_c_try(Tree, Arg, Vars, Body, Evars, Handler),
-      cerl:add_ann([{tainted, Default_taint}], T);
+      update_taint_ann(Default_taint, T);
     tuple ->
       Es = annotate_all(cerl:tuple_es(Tree), TagGen, InPats),
       T1 = cerl:update_c_tuple_skel(Tree, Es),
-      T = cerl:add_ann([{tainted, Default_taint}], T1),
+      T = update_taint_ann(Default_taint, T1),
       case InPats of
         false -> T;
         true  -> cerl:add_ann(tag_pair(TagGen), T)
@@ -440,7 +453,7 @@ annotate(Tree, TagGen, InPats) ->
     values ->
       Es = annotate_all(cerl:values_es(Tree), TagGen, InPats),
       T = cerl:update_c_values(Tree, Es),
-      cerl:add_ann([{tainted, Default_taint}], T);
+      update_taint_ann(Default_taint, T);
     var ->
       cerl:add_ann([{tainted, Default_taint}], Tree);
     _ ->
