@@ -514,17 +514,7 @@ eval({letrec_func, {M, _F, Def, E}}, CAs, SAs, _CallType, Servers, Fd, InhT) ->
 -spec eval_expr(cerl:cerl(), module(), cuter_env:environment(), cuter_env:environment(), servers(), file:io_device(), cuter_taint_annotation:taint()) -> result().
 
 %% c_apply
-eval_expr({c_apply, Anno, Op, Args}, M, Cenv, Senv, Servers, Fd, InhT) ->
-%  case length(Anno) of
-%    LEN1 when LEN1 > 1 ->
-%      case lists:nth(2, Anno) of
-%	{6, 10} ->
-%	  cuter_log:enable_constraint_logging();
-%	_ -> ok
-%      end;
-%    _ -> ok
-%  end,
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_apply, _Anno, Op, Args}, M, Cenv, Senv, Servers, Fd, InhT) ->
   Op_ev = eval_expr(Op, M, Cenv, Senv, Servers, Fd, InhT),
   Fun =
     fun(A) ->
@@ -552,28 +542,17 @@ eval_expr({c_apply, Anno, Op, Args}, M, Cenv, Senv, Servers, Fd, InhT) ->
     Closure ->
       %% Constraint OP_s = OP_c (in case closure is made by make_fun)
       eval({lambda, Closure, get_symbolic(Op_ev)}, CAs, SAs, local, Servers, Fd, InhT)
-%  end,
-%  case length(Anno) of
-%    LEN when LEN > 1 ->
-%      case lists:nth(2, Anno) of
-%	{6, 10} ->
-%	  cuter_log:enable_constraint_logging();
-%	_ -> ok
-%      end;
-%    _ -> ok
   end;
 
 %% c_binary
 %% TODO Use the tags of segments.
-eval_expr({c_binary, Anno, Segments}, M, Cenv, Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_binary, _Anno, Segments}, M, Cenv, Senv, Servers, Fd, InhT) ->
   Segs = [eval_expr(S, M, Cenv, Senv, Servers, Fd, InhT) || S <- Segments],
   {Cs, Ss} = cuter_lib:unzip_with(fun to_tuple/1, Segs),
   append_segments(Cs, Ss, Fd);
 
 %% c_bitstr
-eval_expr({c_bitstr, Anno, Val, Size, Unit, Type, Flags}, M, Cenv, Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_bitstr, _Anno, Val, Size, Unit, Type, Flags}, M, Cenv, Senv, Servers, Fd, InhT) ->
   %% Evaluate the value and the encoding.
   Val_ev = eval_expr(Val, M, Cenv, Senv, Servers, Fd, InhT),
   Val_c = get_concrete(Val_ev),
@@ -599,8 +578,7 @@ eval_expr({c_bitstr, Anno, Val, Size, Unit, Type, Flags}, M, Cenv, Senv, Servers
   mk_result(Bin_c, Bin_s);
 
 %% c_call
-eval_expr({c_call, Anno, Mod, Name, Args}, M, Cenv, Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_call, _Anno, Mod, Name, Args}, M, Cenv, Senv, Servers, Fd, InhT) ->
   Mod_ev = eval_expr(Mod, M, Cenv, Senv, Servers, Fd, InhT),
   Fv_ev = eval_expr(Name, M, Cenv, Senv, Servers, Fd, InhT),
   Fun =
@@ -627,7 +605,6 @@ eval_expr({c_call, Anno, Mod, Name, Args}, M, Cenv, Senv, Servers, Fd, InhT) ->
 
 %% c_case
 eval_expr({c_case, Anno, Arg, Clauses}, M, Cenv, Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
   Arg_ev = eval_expr(Arg, M, Cenv, Senv, Servers, Fd, cuter_taint_annotation:get_taint_anno(Anno) or InhT),
   {Body, Ce, Se, _Cnt} = find_clause(Clauses, M, 'case', get_concrete(Arg_ev), get_symbolic(Arg_ev), Cenv, Senv, Servers, Fd, InhT),
   case not cuter_taint_annotation:get_taint(Body) andalso not InhT of
@@ -639,8 +616,7 @@ eval_expr({c_case, Anno, Arg, Clauses}, M, Cenv, Senv, Servers, Fd, InhT) ->
 
 %% c_catch
 %% Commented code: allow the exceptions to propagate
-eval_expr({c_catch, Anno, Body}, M, Cenv, Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_catch, _Anno, Body}, M, Cenv, Senv, Servers, Fd, InhT) ->
   try
     eval_expr(Body, M, Cenv, Senv, Servers, Fd, InhT)
   catch
@@ -666,8 +642,7 @@ eval_expr({c_catch, Anno, Body}, M, Cenv, Senv, Servers, Fd, InhT) ->
 %%  eval_expr(Body, M, Cenv, Senv, Servers, Fd);
 
 %% c_cons
-eval_expr({c_cons, Anno, Hd, Tl}, M, Cenv, Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_cons, _Anno, Hd, Tl}, M, Cenv, Senv, Servers, Fd, InhT) ->
   Hd_ev = eval_expr(Hd, M, Cenv, Senv, Servers, Fd, InhT),
   Tl_ev = eval_expr(Tl, M, Cenv, Senv, Servers, Fd, InhT),
   Cv = [get_concrete(Hd_ev) | get_concrete(Tl_ev)],
@@ -675,14 +650,12 @@ eval_expr({c_cons, Anno, Hd, Tl}, M, Cenv, Senv, Servers, Fd, InhT) ->
   mk_result(Cv, Sv);
 
 %% c_fun
-eval_expr({c_fun, Anno, Vars, Body}, M, Cenv, Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_fun, _Anno, Vars, Body}, M, Cenv, Senv, Servers, Fd, InhT) ->
   Arity = length(Vars),
   make_fun(Vars, Body, M, Arity, Cenv, Senv, Servers, Fd, InhT);
 
 %% c_let
-eval_expr({c_let, Anno, Vars, Arg, Body}, M, Cenv, Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_let, _Anno, Vars, Arg, Body}, M, Cenv, Senv, Servers, Fd, InhT) ->
   Deg = length(Vars),
   Arg_ev = eval_expr(Arg, M, Cenv, Senv, Servers, Fd, InhT),
   Arg_c = get_concrete(Arg_ev),
@@ -700,8 +673,7 @@ eval_expr({c_let, Anno, Vars, Arg, Body}, M, Cenv, Senv, Servers, Fd, InhT) ->
   eval_expr(Body, M, Ce, Se, Servers, Fd, InhT);
 
 %% c_letrec
-eval_expr({c_letrec, Anno, Defs, Body}, M, Cenv, Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_letrec, _Anno, Defs, Body}, M, Cenv, Senv, Servers, Fd, InhT) ->
   H = fun(F) -> fun() ->
     lists:foldl(
       fun({Func, Def}, {E_c, E_s}) ->
@@ -720,8 +692,7 @@ eval_expr({c_letrec, Anno, Defs, Body}, M, Cenv, Senv, Servers, Fd, InhT) ->
   eval_expr(Body, M, NCe, NSe, Servers, Fd, InhT);
 
 %% c_literal
-eval_expr({c_literal, Anno, V}, _M, _Cenv, _Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_literal, _Anno, V}, _M, _Cenv, _Senv, Servers, Fd, InhT) ->
   case erlang:is_function(V) of
     false -> mk_result(V, V);
     true ->
@@ -742,8 +713,7 @@ eval_expr({c_literal, Anno, V}, _M, _Cenv, _Senv, Servers, Fd, InhT) ->
   end;
 
 %% c_primop
-eval_expr({c_primop, Anno, Name, Args}, M, Cenv, Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_primop, _Anno, Name, Args}, M, Cenv, Senv, Servers, Fd, InhT) ->
   PrimOp = Name#c_literal.val,
   ZAs = [eval_expr(A, M, Cenv, Senv, Servers, Fd, InhT) || A <- Args],
   {CAs, SAs} = cuter_lib:unzip_with(fun to_tuple/1, ZAs),
@@ -764,8 +734,7 @@ eval_expr({c_primop, Anno, Name, Args}, M, Cenv, Senv, Servers, Fd, InhT) ->
   end;
 
 %% c_receive
-eval_expr({c_receive, Anno, Clauses, Timeout, Action}, M, Cenv, Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_receive, _Anno, Clauses, Timeout, Action}, M, Cenv, Senv, Servers, Fd, InhT) ->
   Timeout_ev = eval_expr(Timeout, M, Cenv, Senv, Servers, Fd, InhT),
   Timeout_c = get_concrete(Timeout_ev),
   Timeout_s = get_symbolic(Timeout_ev),
@@ -783,15 +752,13 @@ eval_expr({c_receive, Anno, Clauses, Timeout, Action}, M, Cenv, Senv, Servers, F
   end;
 
 %% c_seq
-eval_expr({c_seq, Anno, Arg, Body}, M, Cenv, Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_seq, _Anno, Arg, Body}, M, Cenv, Senv, Servers, Fd, InhT) ->
   _ = eval_expr(Arg, M, Cenv, Senv, Servers, Fd, InhT),
   eval_expr(Body, M, Cenv, Senv, Servers, Fd, InhT);
 
 %% c_try
 %% Commented code: allow the exceptions to propagate
-eval_expr({c_try, Anno, Arg, Vars, Body, Evars, Handler}, M, Cenv, Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_try, _Anno, Arg, Vars, Body, Evars, Handler}, M, Cenv, Senv, Servers, Fd, InhT) ->
   try
     Deg = length(Vars),
     A_ev = eval_expr(Arg, M, Cenv, Senv, Servers, Fd, InhT),
@@ -843,8 +810,7 @@ eval_expr({c_try, Anno, Arg, Vars, Body, Evars, Handler}, M, Cenv, Senv, Servers
 %%  eval_expr(Body, M, Ce, Se, Servers, Fd);
 
 %% c_tuple
-eval_expr({c_tuple, Anno, Es}, M, Cenv, Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_tuple, _Anno, Es}, M, Cenv, Senv, Servers, Fd, InhT) ->
   Zes = [eval_expr(E, M, Cenv, Senv, Servers, Fd, InhT) || E <- Es],
   {Es_c, Es_s} = cuter_lib:unzip_with(fun to_tuple/1, Zes),
   Cv = list_to_tuple(Es_c),
@@ -852,8 +818,7 @@ eval_expr({c_tuple, Anno, Es}, M, Cenv, Senv, Servers, Fd, InhT) ->
   mk_result(Cv, Sv);
 
 %% c_values
-eval_expr({c_values, Anno, Es}, M, Cenv, Senv, Servers, Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_values, _Anno, Es}, M, Cenv, Senv, Servers, Fd, InhT) ->
   Deg = length(Es),
   Zes = [eval_expr(E, M, Cenv, Senv, Servers, Fd, InhT) || E <- Es],
   {Es_c, Es_s} = cuter_lib:unzip_with(fun to_tuple/1, Zes),
@@ -862,8 +827,7 @@ eval_expr({c_values, Anno, Es}, M, Cenv, Senv, Servers, Fd, InhT) ->
   mk_result(Cv, Sv);
 
 %% c_var
-eval_expr({c_var, Anno, Name}, _M, Cenv, Senv, _Servers, _Fd, InhT) when is_tuple(Name) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_var, _Anno, Name}, _M, Cenv, Senv, _Servers, _Fd, _InhT) when is_tuple(Name) ->
   %% If Name is a function
   case cuter_env:get_value(Name, Cenv) of
     {ok, {letrec_func, {Mod, Def, E}}} ->
@@ -880,8 +844,7 @@ eval_expr({c_var, Anno, Name}, _M, Cenv, Senv, _Servers, _Fd, InhT) when is_tupl
       R = {?FUNCTION_PREFIX, Name},
       mk_result(R, R)
   end;
-eval_expr({c_var, Anno, Name}, _M, Cenv, Senv, _Servers, _Fd, InhT) ->
-  handle_constraint_logging(Anno, InhT),
+eval_expr({c_var, _Anno, Name}, _M, Cenv, Senv, _Servers, _Fd, _InhT) ->
   %% If it's a variable then return its value
   {ok, Cv} = cuter_env:get_value(Name, Cenv),
   {ok, Sv} = cuter_env:get_value(Name, Senv),
@@ -1999,11 +1962,3 @@ log_bistr_type_mismatch(Cv, Sv, Type, Fd) ->
       end
   end.
 
-handle_constraint_logging(_Anno, _InhT) -> ok.
-%  Taint = cuter_taint_annotation:get_taint_anno(Anno),
-%  case Taint or InhT of
-%    true ->
-%      cuter_log:enable_constraint_logging();
-%    false ->
-%      cuter_log:disable_constraint_logging()
-%  end.
