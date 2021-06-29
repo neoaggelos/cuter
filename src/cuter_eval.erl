@@ -630,8 +630,8 @@ eval_expr({c_case, Anno, Arg, Clauses}, M, Cenv, Senv, Servers, Fd, InhT) ->
   handle_constraint_logging(Anno, InhT),
   Arg_ev = eval_expr(Arg, M, Cenv, Senv, Servers, Fd, cuter_taint_annotation:get_taint_anno(Anno) or InhT),
   {Body, Ce, Se, _Cnt} = find_clause(Clauses, M, 'case', get_concrete(Arg_ev), get_symbolic(Arg_ev), Cenv, Senv, Servers, Fd, InhT),
-  case cuter_taint_annotation:get_taint(Body) andalso not InhT of
-    false -> cuter_log:disable_constraint_logging();
+  case not cuter_taint_annotation:get_taint(Body) andalso not InhT of
+    true -> cuter_log:disable_constraint_logging();
     _ -> ok
   end,
   cuter_log:reduce_constraint_counter(), % TODO Should also add this call to c_receive
