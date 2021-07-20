@@ -166,7 +166,7 @@ get_stored_types(Cache) ->
 %% {M, Fun, Arity}      {Def :: #c_fun{}, Exported :: boolean()}
 -spec store_module(cuter:mod(), cerl:cerl(), cuter_codeserver:module_cache(), tag_generator()) -> ok.
 store_module(M, AST, Cache, TagGen) ->
-  AST1 = case cuter_config:fetch(?ANNOTATIONS) of
+  AST2 = case cuter_config:fetch(?ANNOTATIONS) of
     {ok, Anns} ->
       case proplists:get_value(M, Anns) of
         undefined -> AST;
@@ -176,6 +176,14 @@ store_module(M, AST, Cache, TagGen) ->
     _ ->
       AST
   end,
+  AST1 = case cuter_config:fetch(?IGNORE_SAFE) of
+	   {ok, Anns1} ->
+	     case lists:member(M, Anns1) of
+	       true -> cuter_taint_annotation:annotate_taint(AST);
+	       false -> AST2
+	     end;
+	   _ -> AST2
+	 end,
   store_module_info(anno, M, AST1, Cache),
   store_module_info(name, M, AST1, Cache),
   store_module_info(exports, M, AST1, Cache),

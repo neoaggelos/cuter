@@ -91,6 +91,8 @@
 -define(NUM_POLLERS, number_of_pollers).
 %% TEMPORARY: The annotated AST file.
 -define(ANNOTATIONS, annotations).
+%% If enabled, cuter will ignore safe paths in the execution tree.
+-define(IGNORE_SAFE, ignore_safe).
 
 -type runtime_options() :: {?Z3_TIMEOUT, pos_integer()} 
                          | ?REPORT_METRICS
@@ -107,6 +109,7 @@
                          | {?NUM_POLLERS, pos_integer()}
                          | {?WORKING_DIR, file:filename()}
 			 | {?ANNOTATIONS, module(), file:name()}
+			 | {?IGNORE_SAFE, [atom()]}
                          .
 
 %%====================================================================
