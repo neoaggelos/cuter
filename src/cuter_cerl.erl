@@ -179,7 +179,8 @@ store_module(M, AST, Cache, TagGen) ->
   AST1 = case cuter_config:fetch(?IGNORE_SAFE) of
 	   {ok, Anns1} ->
 	     case lists:member(M, Anns1) of
-	       true -> cuter_taint_annotation:annotate_taint(AST);
+	       true -> 
+		 cuter_taint_annotation:annotate_taint(AST);
 	       false -> AST2
 	     end;
 	   _ -> AST2

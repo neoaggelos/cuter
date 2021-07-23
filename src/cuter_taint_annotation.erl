@@ -5,10 +5,12 @@
 -type taint() :: atom().
 -type symbol_table() :: dict:dict().
 -type module_defs() :: [{cerl:cerl(), cerl:cerl()}].
+
 %% annotating function
 
 -spec annotate_taint(cerl:cerl()) -> cerl:cerl().
 annotate_taint(T) ->
+  io:format("~p~n", [T]),
   Defs = cerl:module_defs(T),
   ST = dict:new(),
   NewDefs = annotate_taint_functions(Defs, ST),
@@ -28,9 +30,8 @@ annotate_taint_functions(Funs, ST) ->
 annotate_taint_functions([], ST, Acc, Change) ->
   {ST, Acc, Change};
 annotate_taint_functions([{Var, Fun}|T], ST, Acc, Change) ->
-  io:format("Annotating function: ~p~n~p~n", [cerl:var_name(Var), Fun]),
   {Annotated, C} = annotate_taint(Fun, ST),
-  NewST = dict:store(cerl:var_name(Var), get_taint(Annotated), ST),
+  NewST = dict:store(cerl:var_name(Var), {get_taint(Annotated), 'fun'}, ST),
   annotate_taint_functions(T, NewST, [{Var, Annotated}|Acc], Change or C).
   
 -spec update_ann(cerl:cerl(), taint()) -> cerl:cerl().
@@ -38,6 +39,7 @@ update_ann(T, Taint) ->
   Anno = cerl:get_ann(T),
   cerl:set_ann(T, update_ann(Anno, Taint, [], false)).
 
+-spec update_ann([any()], taint(), [any()], atom()) -> [any()].
 update_ann([], Taint, Acc, false) -> [{tainted, Taint}|Acc];
 update_ann([], _, Acc, true) -> Acc; 
 update_ann([{tainted, _}|T], Taint, Acc, _) -> update_ann(T, Taint, [{tainted, Taint}|Acc], true); 
@@ -53,30 +55,39 @@ annotate_taint(Tree, SM) ->
   case cerl:type(Tree) of
 %    alias ->
     'apply' ->
-      io:format("mexri edo~n"),
-      {Op, C1} = case cerl:type(cerl:apply_op(Tree)) of
+      Op = cerl:apply_op(Tree),
+      {Op1, C1} = case cerl:type(Op) of
 		   var ->
-		     io:format("var case~n"),
-		     case dict:find(cerl:var_name(cerl:apply_op(Tree)), SM) of
+		     case dict:find(cerl:var_name(Op), SM) of
 		       {ok, {Value, 'fun'}} ->
-			 {update_ann(Tree, Value), Value == CurTaint};
+			 {update_ann(Op, Value), Value =/= CurTaint};
 		       _ ->
-			 {update_ann(Tree, true), true == CurTaint}
+			 {update_ann(Op, true), true =/= CurTaint}
 		     end;
 		   _ ->
-		     io:format("~p~n", [cerl:apply_op(Tree)])
+		      io:format("unhandled op")
 		 end,
       {Args, C2} = annotate_taint_all(cerl:apply_args(Tree), SM),
-      NewTaint = get_taint(Op) or get_all_taint(Args),
-      {cerl:update_c_apply(update_ann(Tree, NewTaint), Op, Args), C1 or C2};
+      NewTaint = get_taint(Op1) or get_all_taint(Args),
+      {cerl:update_c_apply(update_ann(Tree, NewTaint), Op1, Args), C1 or C2};
 %    binary ->
 %    bitstr ->
     call ->
-      {Mod, C1} = annotate_taint(cerl:call_module(Tree), SM),
-      {Name, C2} = annotate_taint(cerl:call_name(Tree), SM),
-      {Args, C3} = annotate_taint_all(cerl:call_args(Tree), SM),
-      NewTaint = get_taint(Mod) or get_taint(Name) or get_all_taint(Args),
-      {cerl:update_c_call(update_ann(Tree, NewTaint), Mod, Name, Args), C1 or C2 or C3};
+      Mod = cerl:call_module(Tree),
+      Name = cerl:call_name(Tree),
+      {NewAnn, C1} = case cerl:is_literal(Mod) andalso cerl:is_literal(Mod) of
+		      true ->
+			case dict:find({Mod, Name}, SM) of
+			  {ok, {Value, 'fun'}} ->
+			    {Value, Value =/= CurTaint};
+			  _ ->
+			    {true, true =/= CurTaint}
+			end;
+		      _ -> throw("Unsupported call")
+      end,
+      {Args, C2} = annotate_taint_all(cerl:call_args(Tree), SM),
+      NewTaint = NewAnn or get_all_taint(Args),
+      {cerl:update_c_call(update_ann(Tree, NewTaint), Mod, Name, Args), C1 or C2};
     'case' ->
       {Arg, C1} = annotate_taint(cerl:case_arg(Tree), SM),
       {Clauses, C2} = annotate_taint_all(cerl:case_clauses(Tree), SM),
@@ -114,9 +125,9 @@ annotate_taint(Tree, SM) ->
       NewTaint = lists:foldl(fun (A, B) -> A or B end, false, [get_taint(N) or get_taint(D) || {N, D} <- Defs]) or get_taint(Body),
       {cerl:update_c_letrec(update_ann(Tree, NewTaint), Defs, Body), C1 or C2};
     literal ->
-      {update_ann(Tree, false), false == CurTaint};
+      {update_ann(Tree, false), true == CurTaint};
     primop ->
-      {update_ann(Tree, true), true == CurTaint};
+      {update_ann(Tree, true), false == CurTaint};
 %    'receive' ->
 %    seq ->
 %    'try' ->
@@ -125,9 +136,9 @@ annotate_taint(Tree, SM) ->
     var ->
       case dict:find(cerl:var_name(Tree), SM) of
 	{ok, {Value, _}} ->
-	  {update_ann(Tree, Value), Value == CurTaint};
+	  {update_ann(Tree, Value), Value =/= CurTaint};
 	error ->
-	  {update_ann(Tree, true), true == CurTaint}
+	  {update_ann(Tree, true), true =/= CurTaint}
       end
   end.
 
