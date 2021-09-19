@@ -112,6 +112,8 @@ retrieve_info(IServer, Handle, DataDir) ->
       case cuter_analyzer:get_result(ExStatus) of
         internal_error -> cuter_error;
         ExResult ->
+          % TODO(neoaggelos): is this useful for debugging?
+          % io:fwrite("~p~n", [Logs])),
           Mappings = cuter_analyzer:get_mapping(Logs),
           Traces = cuter_analyzer:get_traces(Logs),
           Int = cuter_analyzer:get_int_process(Logs),

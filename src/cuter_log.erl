@@ -330,6 +330,8 @@ log(Fd, OpCode, TagID, Data) ->
     0 -> ok;
     N when is_integer(N), N > 0 ->
       IsConstraint = is_constraint(OpCode),
+      % TODO(neoaggelos): is this useful for debugging?
+      % io:fwrite("======~n~p~n======~n", [[OpCode, Data, IsConstraint, TagID]])),
       try cuter_serial:to_log_entry(OpCode, Data, IsConstraint, TagID) of
         Jdata ->
           write_data(Fd, Jdata)

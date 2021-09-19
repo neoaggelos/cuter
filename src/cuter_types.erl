@@ -18,7 +18,7 @@
 	 t_integer/0, t_integer_lit/1, t_list/0, t_list/1,
          t_nonempty_list/1, t_nil/0, t_number/0, t_remote/3, t_string/0,
 	 t_tuple/0, t_tuple/1, t_union/1,
-	 t_range/2, t_pos_inf/0, t_neg_inf/0, t_userdef/1]).
+	 t_range/2, t_pos_inf/0, t_neg_inf/0, t_userdef/1, t_map/0]).
 
 -export([erl_type_deps_map/2, get_type_name_from_type_dep/1,
 	 get_type_from_type_dep/1, unique_type_name/3]).
@@ -45,7 +45,7 @@
 	      | ?list_tag | ?local_tag | ?neg_inf | ?nil_tag
 	      | ?nonempty_list_tag | ?pos_inf | ?range_tag | ?record_tag
 	      | ?remote_tag | ?tuple_tag | ?union_tag | ?userdef_tag
-	      | ?type_variable.
+	      | ?type_variable | ?map_tag.
 -type rep()  :: atom() | bitstring_rep()
               | function_det_rep() | function_gen_rep()
               | integer() | integer_range_rep() | local_rep()
@@ -88,6 +88,7 @@
                   | t_bitstring()         % <<_:M>>
                   | t_function()          % function() | Fun | BoundedFun
                   | t_userdef()           % User defined type.
+                  | t_map()               % map
                   .
 
 %% raw_type() represents every possible type or record supported.
@@ -116,6 +117,7 @@
 -type t_list()          :: #t{kind :: ?list_tag, rep :: raw_type()}.
 -type t_nonempty_list() :: #t{kind :: ?nonempty_list_tag, rep :: raw_type()}.
 -type t_union()         :: #t{kind :: ?union_tag, rep :: [raw_type()]}.
+-type t_map()           :: #t{kind :: ?map_tag, rep :: [raw_type()]}.
 
 %% Range of integers.
 -type t_range()           :: #t{kind :: ?range_tag, rep :: integer_range_rep()}.
@@ -385,8 +387,8 @@ t_from_form({type, _, record, [{atom, _, Name} | FieldTypes]}) ->
   Fields = [t_bound_field_from_form(F) || F <- FieldTypes],
   t_record(Name, Fields);
 %% Map
-t_from_form({type, _, map, _}=X) ->
-  throw({unsupported, X});
+t_from_form({type, _, map, _}) ->
+  t_map();
 %% local type
 t_from_form({Tag, _, Name, Types}) when Tag =:= type; Tag =:= user_type ->
   Ts = [t_from_form(T) || T <- Types],
@@ -563,6 +565,10 @@ t_function(Types, Ret, Constraints) ->
 -spec t_userdef(userdef_rep()) -> t_userdef().
 t_userdef(Name) ->
   #t{kind = ?userdef_tag, rep = Name}.
+
+-spec t_map() -> t_map().
+t_map() ->
+  #t{kind = ?map_tag}.
 
 %% Constructors that are essentially aliases.
 

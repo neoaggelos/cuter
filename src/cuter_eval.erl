@@ -842,6 +842,23 @@ eval_expr({c_var, _Anno, Name}, _M, Cenv, Senv, _Servers, _Fd) ->
   {ok, Sv} = cuter_env:get_value(Name, Senv),
   mk_result(Cv, Sv);
 
+% c_map_pair
+eval_expr({c_map_pair, _Anno, Op, Key, Value}, M, Cenv, Senv, Servers, Fd) ->
+  case Op of
+    assoc -> ok,
+    exact -> ok,
+    _ -> exception(error, {unknown_c_map_pair_op, Op}),
+  end,
+  Key_ev = eval_expr(Key, M, Cenv, Senv, Servers, Fd),
+  Value_ev = eval_expr(Value, M, Cenv, Senv, Servers, Fd),
+  C_ev = {get_concrete(Key_ev), get_concrete(Value_ev)},
+  S_ev = {get_symbolic(Key_ev), get_symbolic(Value_ev)},
+  mk_result(C_ev, S_ev);
+
+% c_map
+eval_expr({c_map, _Anno, Arg, Entries, IsPattern}, M, Cenv, Senv, Servers, Fd) ->
+  
+
 eval_expr(Cerl, _M, _Cenv, _Senv, _Servers, _Fd) ->
   exception(error, {unknown_cerl, Cerl}).
 

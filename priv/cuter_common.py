@@ -795,6 +795,13 @@ def is_type_userdef(t):
         t : Spec.Type
     """
     return t.type == Spec.USERDEF
+    
+def is_type_map(t):
+    """
+    Parameters
+        t : Spec.Type
+    """
+    return t.type == Spec.MAP
 
 def get_type_name_of_userdef(t):
     """

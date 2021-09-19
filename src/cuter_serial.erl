@@ -427,7 +427,9 @@ to_type(Type) ->
     ?function_tag ->
       #'Spec.Type'{type = 'FUN', arg = {'fun', to_typesig(Type)}};
     ?userdef_tag ->
-      #'Spec.Type'{type = 'USERDEF', arg = {'type_name', cuter_types:name_of_t_userdef(Type)}}
+      #'Spec.Type'{type = 'USERDEF', arg = {'type_name', cuter_types:name_of_t_userdef(Type)}};
+    ?map_tag ->
+      #'Spec.Type'{type = 'MAP'}
   end.
 
 to_range_bound(Limit) ->

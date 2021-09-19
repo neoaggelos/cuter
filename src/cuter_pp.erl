@@ -1253,7 +1253,9 @@ pp_type(Type, FmtFn) ->
     ?function_tag ->
       FmtFn("~s", [pp_typesig(Type, StrFmtFn)]);
     ?userdef_tag ->
-      FmtFn("~s", [cuter_types:name_of_t_userdef(Type)])
+      FmtFn("~s", [cuter_types:name_of_t_userdef(Type)]);
+    ?map_tag ->
+      FmtFn("map()", [])
   end.
 
 pp_range_bound(Limit) ->

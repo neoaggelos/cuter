@@ -23,6 +23,7 @@ message Spec {
         CONS = 15;
         NTUPLE = 16;
         USERDEF = 17;
+        MAP = 18;
     }
 
     message TypeDef {
