@@ -1253,7 +1253,13 @@ pp_type(Type, FmtFn) ->
     ?function_tag ->
       FmtFn("~s", [pp_typesig(Type, StrFmtFn)]);
     ?userdef_tag ->
-      FmtFn("~s", [cuter_types:name_of_t_userdef(Type)])
+      FmtFn("~s", [cuter_types:name_of_t_userdef(Type)]);
+    ?map_tag ->
+      AssocList = [
+        FmtFn("~s ~s ~s", [pp_type(From, StrFmtFn), assoc_type_op(AssocType), pp_type(To, StrFmtFn)])
+        || { AssocType, From, To } <- cuter_types:assocs_of_t_map(Type)
+      ],
+      FmtFn("#{~s}", [string:join(AssocList, ", ")])
   end.
 
 pp_range_bound(Limit) ->
@@ -1262,6 +1268,13 @@ pp_range_bound(Limit) ->
       integer_to_list(cuter_types:integer_of_t_integer_lit(Limit));
     Kind when Kind =:= ?pos_inf orelse Kind =:= ?neg_inf ->
       ""
+  end.
+
+assoc_type_op(AssocType) ->
+  case AssocType of
+    map_field_assoc -> "=>";
+    map_field_exact -> ":=";
+    _ -> "??"
   end.
 
 pp_typesig(Fun, FmtFn) ->
