@@ -344,6 +344,7 @@ load_mod(M, #st{db = Db}) ->
         true
     end,
   Reply = cuter_cerl:load(M, Cache, fun generate_tag/0, WithPmatch),  %% Load the code of the module
+  %% CONTINUE HERE :: compiling without --disable-pmatch yields compiler errors.
   case Reply of
     {ok, M} -> {ok, Cache};
     _ -> Reply

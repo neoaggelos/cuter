@@ -842,9 +842,29 @@ eval_expr({c_var, _Anno, Name}, _M, Cenv, Senv, _Servers, _Fd) ->
   {ok, Sv} = cuter_env:get_value(Name, Senv),
   mk_result(Cv, Sv);
 
+% c_map
+eval_expr({c_map, _Anno, _Op, Entries, false}, M, Cenv, Senv, Servers, Fd) ->
+  % TODO: change this to use [ Eval || E <- Entries ], and cuter_lib:unzip_with(fun to_tuple/1, Es)
+  { Concrete, Symbolic } = eval_c_map_pairs(Entries, M, Cenv, Senv, Servers, Fd),
+  mk_result(maps:from_list(Concrete), maps:from_list(Symbolic));
+
 eval_expr(Cerl, _M, _Cenv, _Senv, _Servers, _Fd) ->
   exception(error, {unknown_cerl, Cerl}).
 
+% c_map_pair
+eval_c_map_pairs([], _, _, _, _, _) ->
+  {[],[]};
+eval_c_map_pairs([Head | Tail], M, Cenv, Senv, Servers, Fd) ->
+  {c_map_pair, _Anno, Op, Key, Value} = Head,
+  case Op of
+    {c_literal, _, assoc} -> ok;
+    {c_literal, _, exact} -> exception(error, {bad_c_map_pair_op, not_allowed, Op});
+    _ -> exception(error, {bad_c_map_pair_op, unknown, Op})
+  end,
+  K_ev = eval_expr(Key, M, Cenv, Senv, Servers, Fd),
+  V_ev = eval_expr(Value, M, Cenv, Senv, Servers, Fd),
+  { Cs, Ss } = eval_c_map_pairs(Tail, M, Cenv, Senv, Servers, Fd),
+  { [{get_concrete(K_ev), get_concrete(V_ev)} | Cs], [{get_symbolic(K_ev), get_symbolic(V_ev)} | Ss] }.
 
 %% --------------------------------------------------------
 %% Evaluates a BIF call

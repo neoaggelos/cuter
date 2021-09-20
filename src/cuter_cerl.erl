@@ -412,6 +412,7 @@ annotate(Tree, TagGen, InPats) ->
     var ->
       Tree;
     _ ->
+      %% TODO: what do we need to add here (breaks without --disable-pmatch)
       Tree  %% TODO Ignore maps (for now) and modules.
   end.
 
