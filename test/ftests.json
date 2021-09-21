@@ -1279,6 +1279,34 @@
                 "$1 == -2 or $1 == 2"
             ],
             "skip": false
+        },
+        {
+            "module": "map",
+            "function": "simple_extend",
+            "args": "[10]",
+            "depth": "30",
+            "errors": true,
+            "arity": 1,
+            "nondeterministic": true,
+            "xopts": "--disable-pmatch --suppress-unsupported",
+            "solutions": [
+                "$1 == -2 or $1 == 2"
+            ],
+            "skip": false
+        },
+        {
+            "module": "map",
+            "function": "extend_empty",
+            "args": "[10]",
+            "depth": "30",
+            "errors": true,
+            "arity": 1,
+            "nondeterministic": true,
+            "xopts": "--disable-pmatch",
+            "solutions": [
+                "$1 == -2 or $1 == 2"
+            ],
+            "skip": false
         }
     ]
 }
