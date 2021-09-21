@@ -843,28 +843,25 @@ eval_expr({c_var, _Anno, Name}, _M, Cenv, Senv, _Servers, _Fd) ->
   mk_result(Cv, Sv);
 
 % c_map
-eval_expr({c_map, _Anno, _Op, Entries, false}, M, Cenv, Senv, Servers, Fd) ->
-  % TODO: change this to use [ Eval || E <- Entries ], and cuter_lib:unzip_with(fun to_tuple/1, Es)
-  { Concrete, Symbolic } = eval_c_map_pairs(Entries, M, Cenv, Senv, Servers, Fd),
-  mk_result(maps:from_list(Concrete), maps:from_list(Symbolic));
-
-eval_expr(Cerl, _M, _Cenv, _Senv, _Servers, _Fd) ->
-  exception(error, {unknown_cerl, Cerl}).
+eval_expr({c_map, _Anno, Arg, Entries, false}, M, Cenv, Senv, Servers, Fd) ->
+  Entries_ev = [eval_expr({c_map_pair, A, Op, K, V}, M, Cenv, Senv, Servers, Fd) || {c_map_pair, A, Op, K, V} <- Entries],
+  { C_ev, S_ev } = cuter_lib:unzip_with(fun to_tuple/1, Entries_ev),
+  { CArg, SArg } = to_tuple(eval_expr(Arg, M, Cenv, Senv, Servers, Fd)),
+  mk_result(maps:merge(CArg, maps:from_list(C_ev)), maps:merge(SArg, maps:from_list(S_ev)));
 
 % c_map_pair
-eval_c_map_pairs([], _, _, _, _, _) ->
-  {[],[]};
-eval_c_map_pairs([Head | Tail], M, Cenv, Senv, Servers, Fd) ->
-  {c_map_pair, _Anno, Op, Key, Value} = Head,
+eval_expr({c_map_pair, _Anno, Op, K, V}, M, Cenv, Senv, Servers, Fd) ->
   case Op of
     {c_literal, _, assoc} -> ok;
     {c_literal, _, exact} -> exception(error, {bad_c_map_pair_op, not_allowed, Op});
     _ -> exception(error, {bad_c_map_pair_op, unknown, Op})
   end,
-  K_ev = eval_expr(Key, M, Cenv, Senv, Servers, Fd),
-  V_ev = eval_expr(Value, M, Cenv, Senv, Servers, Fd),
-  { Cs, Ss } = eval_c_map_pairs(Tail, M, Cenv, Senv, Servers, Fd),
-  { [{get_concrete(K_ev), get_concrete(V_ev)} | Cs], [{get_symbolic(K_ev), get_symbolic(V_ev)} | Ss] }.
+  { Ck, Sk } = to_tuple(eval_expr(K, M, Cenv, Senv, Servers, Fd)),
+  { Cv, Sv } = to_tuple(eval_expr(V, M, Cenv, Senv, Servers, Fd)),
+  mk_result({Ck, Cv}, {Sk, Sv});
+
+eval_expr(Cerl, _M, _Cenv, _Senv, _Servers, _Fd) ->
+  exception(error, {unknown_cerl, Cerl}).
 
 %% --------------------------------------------------------
 %% Evaluates a BIF call
