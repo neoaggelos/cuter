@@ -43,6 +43,7 @@
 -define(binary_id, {binary}).
 -define(cons_id, {cons}).
 -define(tuple_id, {tuple}).
+-define(map_id, {map}).
 -define(literal_id(V), V).
 
 
@@ -335,6 +336,7 @@ con_desc(E) ->
 		T when is_tuple(T) -> {?tuple_id, tuple_size(T)};
 		V -> {?literal_id(V), 0}
 	    end;
+	map -> {?map_id, 0};
 	_ ->
 	    throw({bad_constructor, E})
     end.
@@ -350,7 +352,8 @@ con_desc_type({?literal_id(V), _}) when is_integer(V) -> integer;
 con_desc_type({?literal_id(V), _}) when is_float(V) -> float;
 con_desc_type({?cons_id, 2}) -> cons;
 con_desc_type({?tuple_id, _}) -> tuple;
-con_desc_type({?binary_id, _}) -> binary.
+con_desc_type({?binary_id, _}) -> binary;
+con_desc_type({?map_id, _}) -> map.
 
 %% This creates a new constructor pattern from a type descriptor and a
 %% list of variables.
@@ -377,6 +380,7 @@ sub_pats(E) ->
 				       || X <- tuple_to_list(T)];
 		_ -> []
 	    end;
+	map -> [];
 	_ ->
 	    throw({bad_constructor_pattern, E})
     end.
@@ -501,7 +505,8 @@ expr(E, Env) ->
 	    Ds1 = defs(Ds, Env1),
 	    cerl:update_c_module(E, cerl:module_name(E),
 				 cerl:module_exports(E),
-				 cerl:module_attrs(E), Ds1)
+				 cerl:module_attrs(E), Ds1);
+	map -> E
     end.
 
 expr_list(Es, Env) ->

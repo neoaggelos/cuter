@@ -253,6 +253,8 @@ is_bif({lists, keymember, 3}) -> true;
 is_bif({lists, keysearch, 3}) -> true;
 %% Module math.
 is_bif({math, _F, _A}) -> true;
+%% Module maps.
+% is_bif({maps, _F, _A}) -> true;
 %% Module net_kernel.
 is_bif({net_kernel, dflag_unicode_io, 1}) -> true;
 %% Module os.

@@ -411,6 +411,14 @@ annotate(Tree, TagGen, InPats) ->
       cerl:update_c_values(Tree, Es);
     var ->
       Tree;
+    % map ->
+    %   Arg = annotate(cerl:map_arg(Tree), TagGen, false),
+    %   Es = annotate_all(cerl:map_es(Tree), TagGen, false),
+    %   cerl:update_c_map(Tree, Arg, Es);
+    % map_pair ->
+    %   Key = annotate(cerl:map_pair_key(Tree), TagGen, false),
+    %   Val = annotate(cerl:map_pair_val(Tree), TagGen, false),
+    %   cerl:update_c_map_pair(Tree, cerl:map_pair_op(Tree), Key, Val);
     _ ->
       %% TODO: what do we need to add here (breaks without --disable-pmatch)
       Tree  %% TODO Ignore maps (for now) and modules.
