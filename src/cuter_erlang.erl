@@ -30,6 +30,7 @@
         , is_binary/1, bit_size/1, byte_size/1
         , 'bsl'/2, 'bsr'/2, 'bnot'/1
         , maps_get/2, ismap/1, maps_put/3
+        , maps_from_list/1
         ]).
 
 %% XXX When adding type constraints for spec, the overriding funs must be ignored
@@ -945,6 +946,12 @@ ismap(_) -> false.
 -spec maps_put(any(), any(), #{ any() => any() }) -> #{ any() => any() }.
 maps_put(Key, Val, Map) when is_map(Map) ->
   Map#{Key => Val}.
+
+-spec maps_from_list([{ any(), any()}]) -> #{ any() => any() }.
+maps_from_list(L) -> maps_from_list(#{}, L).
+
+maps_from_list(Map, []) -> Map;
+maps_from_list(Map, [{K, V}|T]) -> maps_from_list(Map#{K => V}, T).
 
 %% ----------------------------------------------------------------------------
 %% BINARY / BITSTRING OPERATIONS

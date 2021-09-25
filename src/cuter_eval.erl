@@ -1224,6 +1224,9 @@ pattern_match({c_alias, _Anno, Var, Pat}, BitInfo, Mode, Cv, Sv, CMaps, SMaps, S
 pattern_match({c_map, As, Arg, [{c_map_pair, _Anno, _, PKey, PValue}|Rest], IsPat}, BitInfo, Mode, Cv, Sv, CMaps, SMaps, Servers, Fd) ->
   { M, Cenv, Senv } = BitInfo,
   { CPKey, SPKey } = to_tuple(eval_expr(PKey, M, Cenv, Senv, Servers, Fd)),
+  % io:fwrite("ATTEMPT! [~p]~n", [[PKey, CPKey, SPKey, Cv, Sv]]),
+  % io:fwrite("CONCRETE ENV IS [~p]~n", [Cenv]),
+  % io:fwrite("SYMBOLIC ENV IS [~p]~n", [Senv]),
   case { Cv, Sv } of
     % TODO: symbolic matching for maps
     { #{ CPKey := Cval }, #{ SPKey := Sval } } ->

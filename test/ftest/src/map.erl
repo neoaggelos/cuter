@@ -4,6 +4,7 @@
         , simple_match/1, match_cases/1, match_many/2
         , match_lit/1, match_var/1, match_embed/1
         , maps_get/1, maps_put/1
+        , fromlist/2
         ]).
 
 -spec simple(integer()) -> #{value => float()}.
@@ -83,3 +84,7 @@ maps_put(X) ->
     Y = maps:get(value, Z),
     10 / (Y+1).
 
+-spec fromlist(atom(), integer()) -> float().
+fromlist(X, Y) ->
+    Z = maps:from_list([{X, Y}]),
+    10 / maps:get(X, Z).

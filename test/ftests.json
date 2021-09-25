@@ -1419,6 +1419,20 @@
                 "$1 == -1"
             ],
             "skip": false
+        },
+        {
+            "module": "map",
+            "function": "fromlist",
+            "args": "[10,10]",
+            "depth": "30",
+            "errors": true,
+            "arity": 2,
+            "nondeterministic": true,
+            "xopts": "--disable-pmatch",
+            "solutions": [
+                "$1 == -10"
+            ],
+            "skip": false
         }
     ]
 }
