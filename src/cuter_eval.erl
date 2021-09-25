@@ -1220,6 +1220,27 @@ pattern_match({c_alias, _Anno, Var, Pat}, BitInfo, Mode, Cv, Sv, CMaps, SMaps, S
       {true, {Cs, Ss}}
   end;
 
+%% Map pattern
+pattern_match({c_map, As, Arg, [{c_map_pair, _Anno, _, PKey, PValue}|Rest], IsPat}, BitInfo, Mode, Cv, Sv, CMaps, SMaps, Servers, Fd) ->
+  { M, Cenv, Senv } = BitInfo,
+  { CPKey, SPKey } = to_tuple(eval_expr(PKey, M, Cenv, Senv, Servers, Fd)),
+  case { Cv, Sv } of
+    % TODO: symbolic matching for maps
+    { #{ CPKey := Cval }, #{ SPKey := Sval } } ->
+      case pattern_match(PValue, BitInfo, Mode, Cval, Sval, CMaps, SMaps, Servers, Fd) of
+        {true, {CMs, SMs}} -> pattern_match({c_map, As, Arg, Rest, IsPat}, BitInfo, Mode, Cv, Sv, CMs, SMs, Servers, Fd);
+        false -> false
+      end;
+    _ -> false
+  end;
+
+pattern_match({c_map, _Anno, _Arg, [], _IsPat}, _BitInfo, _Mode, Cv, _Sv, CMaps, SMaps, _Servers, _Fd) ->
+  % Empty map pattern matches any map
+  case is_map(Cv) of
+    true -> {true, {CMaps, SMaps}};
+    false -> false
+  end;
+
 %% Binary pattern
 pattern_match({c_binary, Anno, Segments}, BitInfo, Mode, Cv, Sv, CMaps, SMaps, Servers, Fd) ->
   bit_pattern_match(Anno, Segments, BitInfo, Mode, Cv, Sv, CMaps, SMaps, Servers, Fd).
