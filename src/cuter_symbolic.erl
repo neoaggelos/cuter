@@ -153,6 +153,8 @@ cons(V1, V2, Cv, Fd) ->
 -spec break_term(break_tuple | break_list, symbolic(), pos_integer(), file:io_device()) -> [symbolic()].
 break_term(M, Sv, N, Fd) when M =:= break_tuple; M =:= break_list ->
   Vs = [fresh_symbolic_var() || _ <- lists:seq(1, N)],
+  io:fwrite("*******************************~n"),
+  io:fwrite("BREAK SYMBOLIC LIST/TUPLE~n-- SYMBOLIC VALUE ~p~n-- NEW SYMBOLIC VALUES ~p~n", [Sv, Vs]),
   cuter_log:log_unfold_symbolic(Fd, M, Sv, Vs),
   Vs.
 
@@ -160,10 +162,13 @@ break_term(M, Sv, N, Fd) when M =:= break_tuple; M =:= break_list ->
 %% (Used when creating tuples).
 -spec make_tuple([maybe_s(any())], tuple(), file:io_device()) -> maybe_s(tuple()).
 make_tuple(Xs, Cv, Fd) ->
+  io:fwrite("*******************************~n"),
+  io:fwrite("MAKE TUPLE~n-- CONCRETE VALUE ~p~n-- SYMBOLIC VALUES ~p~n", [Cv, Xs]),
   case lists:any(fun is_symbolic/1, Xs) of
     false -> Cv;
     true ->
       Sv = fresh_symbolic_var(),
+      io:fwrite("-- NEW SYMBOLIC VALUE ~p~n", [Sv]),
       cuter_log:log_make_tuple(Fd, Sv, Xs),
       Sv
   end.

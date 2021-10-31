@@ -1423,14 +1423,14 @@
         {
             "module": "map",
             "function": "fromlist",
-            "args": "[10,10]",
+            "args": "[10,11]",
             "depth": "30",
             "errors": true,
             "arity": 2,
             "nondeterministic": true,
             "xopts": "--disable-pmatch",
             "solutions": [
-                "$1 == -10"
+                "$2 == 0"
             ],
             "skip": false
         }
