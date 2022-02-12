@@ -50,7 +50,7 @@ run_multiple_test_() ->
     Errors = cuter:run(Seeds, cuter_options()),
     Errors1 = filter_errors({lists, nth, 2}, Errors),
     Errors2 = filter_errors({lists, nthtail, 2}, Errors),
-    LenChecks = [?assertEqual(2, length(Errors1)), ?assertEqual(2, length(Errors2))],
+    LenChecks = [?assertEqual(5, length(Errors1)), ?assertEqual(5, length(Errors2))],
     ValChecks = [?assert(N > length(L)) || [N, L] <- Errors1 ++ Errors2],
     LenChecks ++ ValChecks
   end,
@@ -63,7 +63,7 @@ filter_errors(Mfa, Errors) ->
   end.
 
 cuter_options() ->
-  [{number_of_pollers, 1}, {number_of_solvers, 2}].
+  [{number_of_pollers, 1}, {number_of_solvers, 2}, disable_pmatch].
 
 %% ------------------------------------------------------------------
 %% Functions with bugs for testing

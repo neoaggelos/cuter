@@ -39,7 +39,7 @@ eval_cerl_test_() ->
   [{"Basic Cerl Evaluation: " ++ C, {setup, Setup(I), Cleanup, Inst}} || {C, I} <- Is].
 
 eval_cerl({F, As, Result, Dir}) ->
-  cuter_config:store(?DISABLE_PMATCH, false),
+  cuter_config:store(?DISABLE_PMATCH, true),
   cuter_config:store(?DISABLE_TYPE_NORMALIZATION, false),
   cuter_config:store(?WHITELISTED_MFAS, cuter_mock:empty_whitelist()),
   CodeServer = cuter_codeserver:start(),
@@ -203,4 +203,3 @@ selective_receive(N) ->
   [Pid ! go || Pid <- [PH, PL]],
   receive {PH, high} -> ok end,
   receive {PL, low} -> ok end.
-
